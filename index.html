@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#174f3d">
+  <meta name="description" content="Daily staff attendance register for ESDI.">
+  <title>ESDI | Attendance Register</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="ESDI attendance register">
+      <span class="brand-mark" aria-hidden="true">E</span>
+      <span class="brand-text"><strong>ESDI</strong><small>ENGINEERING SERVICES<br>&amp; DIGITAL INNOVATION</small></span>
+    </a>
+    <span class="topbar-label"><i></i> STAFF ATTENDANCE</span>
+  </header>
+
+  <main class="shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div><p class="eyebrow">DEPARTMENT REGISTER <span>•</span> DAILY RECORD</p>
+        <h1 id="page-title">Attendance, <em>accounted for.</em></h1>
+        <p class="subtitle">A clear record of who's here, when they arrived, and when they head out.</p></div>
+      <div class="date-box"><span class="date-icon" aria-hidden="true">▦</span><div><label for="attendance-date">REGISTER DATE</label><input id="attendance-date" type="date"></div></div>
+    </section>
+
+    <section class="stats" aria-label="Attendance overview">
+      <article class="stat"><span class="stat-icon green" aria-hidden="true">◎</span><div><span>ON THE REGISTER</span><strong id="staff-count">0</strong></div><small>staff</small></article>
+      <article class="stat"><span class="stat-icon yellow" aria-hidden="true">↗</span><div><span>CHECKED IN</span><strong id="checked-in-count">0</strong></div><small>today</small></article>
+      <article class="stat"><span class="stat-icon gray" aria-hidden="true">✎</span><div><span>SIGNATURES</span><strong id="signature-count">0</strong></div><small>recorded</small></article>
+    </section>
+
+    <section class="panel" aria-labelledby="register-heading">
+      <div class="panel-head">
+        <div><p class="eyebrow">DAILY LOG</p><h2 id="register-heading">Staff attendance</h2></div>
+        <div class="actions"><span id="save-status" role="status">Changes save automatically</span>
+          <button class="button secondary" id="export-button" type="button" disabled>↓ &nbsp;Export CSV</button>
+          <button class="button primary" id="submit-button" type="button" disabled>Submit attendance &nbsp;→</button>
+        </div>
+      </div>
+      <p class="helper">Add staff below to start today's register. Attendance changes save in this browser.</p>
+      <div class="table-wrap"><table><caption class="sr-only">Attendance records for the selected date</caption>
+        <thead><tr><th scope="col">S.NO</th><th scope="col">FULLNAME</th><th scope="col">RANK</th><th scope="col">TIME IN</th><th scope="col">TIME OUT</th><th scope="col">SIGNATURE</th></tr></thead>
+        <tbody id="attendance-rows"></tbody>
+      </table>
+      <div id="empty-state" class="empty"><span aria-hidden="true">＋</span><strong>Your register starts here</strong><p>Add a staff member below and they will appear in this attendance table.</p></div></div>
+      <div class="table-foot"><span><i></i> ESDI STAFF REGISTER</span><span id="record-count">0 staff listed</span></div>
+    </section>
+
+    <section class="staff-panel" aria-labelledby="staff-heading">
+      <div class="staff-intro"><span class="add-icon" aria-hidden="true">＋</span><div><p class="eyebrow">ROSTER MANAGEMENT</p><h2 id="staff-heading">New staff update</h2><p>Add a staff member to the department register. They will be included in daily attendance sheets.</p></div></div>
+      <form id="staff-form"><div class="field"><label for="staff-name">Full name</label><input id="staff-name" name="name" autocomplete="name" maxlength="100" placeholder="e.g. Ada Okafor" required></div>
+        <div class="field"><label for="staff-rank">Rank</label><input id="staff-rank" name="rank" maxlength="80" placeholder="e.g. Senior Engineer" required></div>
+        <button class="button dark" type="submit">Add to register &nbsp;＋</button></form>
+    </section>
+    <footer><span>ESDI <b>/</b> Engineering Services &amp; Digital Innovation</span><span>Records are stored on this device.</span></footer>
+  </main>
+
+  <dialog id="signature-dialog" aria-labelledby="signature-title">
+    <form method="dialog" class="dialog-close"><button aria-label="Close signature dialog">×</button></form>
+    <p class="eyebrow">ATTENDANCE CONFIRMATION</p><h2 id="signature-title">Add signature</h2><p id="signature-person" class="signature-person"></p>
+    <label class="canvas-label" for="signature-canvas">Draw signature</label>
+    <div class="canvas-wrap"><canvas id="signature-canvas" aria-label="Draw signature using pointer or touch"></canvas><span aria-hidden="true">Sign here</span></div>
+    <div class="divider">OR TYPE YOUR FULL NAME</div><label class="sr-only" for="typed-signature">Typed signature</label>
+    <input id="typed-signature" class="typed-signature" maxlength="100" placeholder="Type full name as signature" autocomplete="name">
+    <p id="signature-error" class="error" role="alert"></p>
+    <div class="dialog-actions"><button class="button secondary" id="clear-signature" type="button">Clear</button><button class="button primary" id="save-signature" type="button">Save signature &nbsp;→</button></div>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
