@@ -10,14 +10,41 @@
   <script src="app.js" defer></script>
 </head>
 <body>
+  <main id="login-screen" class="login-screen">
+    <a class="brand login-brand" href="#" aria-label="ESDI attendance register">
+      <span class="brand-mark" aria-hidden="true">E</span>
+      <span class="brand-text"><strong>ESDI</strong><small>ENGINEERING SERVICES<br>&amp; DIGITAL INNOVATION</small></span>
+    </a>
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="login-symbol" aria-hidden="true">↗</div>
+      <p class="eyebrow">ESDI STAFF REGISTER</p>
+      <h1 id="login-title">Welcome back.</h1>
+      <p id="login-description" class="login-description">Sign in to continue to the department attendance register.</p>
+      <form id="login-form">
+        <div class="field">
+          <label for="login-password">Access password</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" minlength="8" required>
+        </div>
+        <div id="confirm-password-field" class="field" hidden>
+          <label for="confirm-password">Confirm password</label>
+          <input id="confirm-password" name="confirm-password" type="password" autocomplete="new-password" minlength="8">
+        </div>
+        <p id="login-error" class="error" role="alert" aria-live="polite"></p>
+        <button id="login-submit" class="button primary login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button>
+      </form>
+      <p id="login-note" class="login-note">Your attendance data stays in this browser.</p>
+    </section>
+    <p class="login-footer">Engineering Services &amp; Digital Innovation</p>
+  </main>
+
+  <div id="app-content" hidden>
   <header class="topbar">
     <a class="brand" href="#" aria-label="ESDI attendance register">
       <span class="brand-mark" aria-hidden="true">E</span>
       <span class="brand-text"><strong>ESDI</strong><small>ENGINEERING SERVICES<br>&amp; DIGITAL INNOVATION</small></span>
     </a>
-    <span class="topbar-label"><i></i> STAFF ATTENDANCE</span>
+    <div class="topbar-actions"><span class="topbar-label"><i></i> STAFF ATTENDANCE</span><button id="logout-button" class="logout-button" type="button">Sign out</button></div>
   </header>
-
   <main class="shell">
     <section class="hero" aria-labelledby="page-title">
       <div><p class="eyebrow">DEPARTMENT REGISTER <span>•</span> DAILY RECORD</p>
@@ -69,5 +96,6 @@
     <div class="dialog-actions"><button class="button secondary" id="clear-signature" type="button">Clear</button><button class="button primary" id="save-signature" type="button">Save signature &nbsp;→</button></div>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
+  </div>
 </body>
 </html>

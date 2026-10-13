@@ -1,6 +1,182 @@
 (() => {
   "use strict";
 
+  const AUTH_KEY = "esdi-attendance-password-v1";
+  const SESSION_KEY = "esdi-attendance-session-v1";
+  const loginScreen = document.querySelector("#login-screen");
+  const appContent = document.querySelector("#app-content");
+  const loginForm = document.querySelector("#login-form");
+  const passwordInput = document.querySelector("#login-password");
+  const confirmPasswordInput = document.querySelector("#confirm-password");
+  const confirmPasswordField = document.querySelector("#confirm-password-field");
+  const loginError = document.querySelector("#login-error");
+  const loginTitle = document.querySelector("#login-title");
+  const loginDescription = document.querySelector("#login-description");
+  const loginNote = document.querySelector("#login-note");
+  const loginSubmit = document.querySelector("#login-submit");
+  let registerInitialized = false;
+
+  configureLogin();
+  loginForm.addEventListener("submit", handleLogin);
+  document.querySelector("#logout-button").addEventListener("click", () => {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch (error) {
+      console.error("Unable to clear the browser login session.", error);
+    }
+    showLogin();
+  });
+
+  try {
+    if (sessionStorage.getItem(SESSION_KEY) === "authenticated") showApp();
+    else passwordInput.focus();
+  } catch (error) {
+    console.error("Unable to read the browser login session.", error);
+    passwordInput.focus();
+  }
+
+  function configureLogin() {
+    let firstVisit;
+    try {
+      firstVisit = localStorage.getItem(AUTH_KEY) === null;
+    } catch (error) {
+      console.error("Unable to check browser login setup.", error);
+      loginError.textContent = "Browser storage is unavailable. Enable site storage to use the login page.";
+      loginSubmit.disabled = true;
+      return;
+    }
+
+    confirmPasswordField.hidden = !firstVisit;
+    confirmPasswordInput.required = firstVisit;
+    passwordInput.autocomplete = firstVisit ? "new-password" : "current-password";
+    loginTitle.textContent = firstVisit ? "Set up access." : "Welcome back.";
+    loginDescription.textContent = firstVisit
+      ? "Create an access password for this browser to protect the department attendance register."
+      : "Sign in to continue to the department attendance register.";
+    loginSubmit.innerHTML = firstVisit
+      ? 'Create password <span aria-hidden="true">→</span>'
+      : 'Sign in <span aria-hidden="true">→</span>';
+    loginNote.textContent = firstVisit
+      ? "Use at least 8 characters. This password is saved only in this browser."
+      : "This local login is a convenience barrier; it does not secure the public site.";
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    loginError.textContent = "";
+    loginSubmit.disabled = true;
+
+    try {
+      const password = passwordInput.value;
+      const stored = localStorage.getItem(AUTH_KEY);
+      if (stored === null) {
+        if (password.length < 8) {
+          loginError.textContent = "Choose a password with at least 8 characters.";
+          return;
+        }
+        if (password !== confirmPasswordInput.value) {
+          loginError.textContent = "The passwords do not match.";
+          return;
+        }
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const hash = await passwordHash(password, salt);
+        localStorage.setItem(AUTH_KEY, JSON.stringify({
+          salt: encodeBase64(salt),
+          hash,
+          iterations: 310000
+        }));
+      } else {
+        let credentials;
+        try {
+          credentials = JSON.parse(stored);
+        } catch (error) {
+          console.error("Stored login credentials could not be read.", error);
+          loginError.textContent = "Saved login details are invalid. Clear this site's data to set up access again.";
+          return;
+        }
+        if (!credentials?.salt || !credentials?.hash || !Number.isInteger(credentials.iterations)) {
+          loginError.textContent = "Saved login details are invalid. Clear this site's data to set up access again.";
+          return;
+        }
+        const actualHash = await passwordHash(password, decodeBase64(credentials.salt), credentials.iterations);
+        if (!sameValue(actualHash, credentials.hash)) {
+          loginError.textContent = "That password doesn't match. Please try again.";
+          passwordInput.value = "";
+          passwordInput.focus();
+          return;
+        }
+      }
+
+      try {
+        sessionStorage.setItem(SESSION_KEY, "authenticated");
+      } catch (error) {
+        console.error("Unable to save the browser login session.", error);
+        loginError.textContent = "Browser session storage is unavailable. Enable site storage and try again.";
+        return;
+      }
+      loginForm.reset();
+      showApp();
+    } catch (error) {
+      console.error("Unable to verify the login password.", error);
+      loginError.textContent = "Unable to verify the password. Check browser support and try again.";
+    } finally {
+      loginSubmit.disabled = false;
+    }
+  }
+
+  async function passwordHash(password, salt, iterations = 310000) {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    );
+    const derived = await crypto.subtle.deriveBits({
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt,
+      iterations
+    }, key, 256);
+    return encodeBase64(new Uint8Array(derived));
+  }
+
+  function encodeBase64(bytes) {
+    return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+  }
+
+  function decodeBase64(value) {
+    return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+  }
+
+  function sameValue(left, right) {
+    if (left.length !== right.length) return false;
+    let difference = 0;
+    for (let index = 0; index < left.length; index += 1) {
+      difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+    }
+    return difference === 0;
+  }
+
+  function showLogin() {
+    appContent.hidden = true;
+    loginScreen.hidden = false;
+    configureLogin();
+    passwordInput.value = "";
+    confirmPasswordInput.value = "";
+    passwordInput.focus();
+  }
+
+  function showApp() {
+    loginScreen.hidden = true;
+    appContent.hidden = false;
+    if (!registerInitialized) {
+      initializeRegister();
+      registerInitialized = true;
+    }
+  }
+
+  function initializeRegister() {
   const STAFF_KEY = "esdi-attendance-staff-v1";
   const DAYS_KEY = "esdi-attendance-days-v1";
   const $ = (selector) => document.querySelector(selector);
@@ -340,4 +516,5 @@
   }
 
   render();
+  }
 })();

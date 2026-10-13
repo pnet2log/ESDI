@@ -6,6 +6,12 @@ An attendance register for Engineering Services and Digital Innovation staff.
 
 Open `index.html` in a modern browser. The app has no build step or external runtime dependencies.
 
+## Login
+
+On the first visit in a browser, create an access password of at least 8 characters. Later visits require that password; signing out ends the current browser session. The password verifier and attendance records are stored in that browser, and clearing the site's browser data resets both.
+
+**Important:** GitHub Pages serves this app as public static files. The login is a browser-side convenience barrier, not server-enforced authentication; it cannot prevent a visitor from accessing the public app or its code. Do not use it to protect confidential attendance data. Real access control requires a private deployment or a backend authentication service.
+
 ## Use the register
 
 - Add staff members with their full name and rank in **New staff update**.
