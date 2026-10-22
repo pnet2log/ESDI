@@ -12,6 +12,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   getFirestore,
   onSnapshot,
@@ -122,13 +123,15 @@ function setAuthMode(mode) {
   passwordInput.autocomplete = signup ? "new-password" : "current-password";
   loginTitle.textContent = signup ? "Create your account." : "Welcome back.";
   loginDescription.textContent = signup
-    ? "Create a verified ESDI register account to access attendance from any device."
+    ? "Create an account, verify your email, and request access from the register administrator."
     : "Sign in to continue to the shared department attendance register.";
   loginSubmit.innerHTML = signup
     ? 'Create account <span aria-hidden="true">→</span>'
     : 'Sign in <span aria-hidden="true">→</span>';
   authModeButton.textContent = signup ? "Back to sign in" : "Create an account";
-  loginNote.textContent = "Use the same verified email and password on each device. All registered accounts share this department register.";
+  loginNote.textContent = signup
+    ? "Creating an account does not grant register access. Only administrator-approved email addresses can sign in."
+    : "Only verified email addresses approved by the register administrator can access the shared register.";
   loginError.textContent = "";
 }
 
@@ -152,6 +155,7 @@ onAuthStateChanged(auth, async (user) => {
   if (!user) {
     if (registerOwner) {
       stopRegisterListeners();
+      clearLocalRegisterCache();
       registerOwner = null;
     }
     loginScreen.hidden = false;
@@ -163,11 +167,29 @@ onAuthStateChanged(auth, async (user) => {
     appContent.hidden = true;
     return;
   }
+  const approvalEmail = user.email?.toLowerCase();
+  if (!approvalEmail) {
+    denyRegisterAccess("This account does not have a verified email address.");
+    return;
+  }
+  try {
+    const approval = await getDoc(doc(db, "approvedUsers", approvalEmail));
+    if (!approval.exists()) {
+      denyRegisterAccess("This account has not been approved. Contact the register administrator.");
+      return;
+    }
+  } catch (error) {
+    console.error("Unable to verify register access.", error);
+    denyRegisterAccess("Unable to verify account approval. Check your connection and try again.");
+    return;
+  }
+  if (auth.currentUser?.uid !== user.uid) return;
   loginScreen.hidden = true;
   appContent.hidden = false;
   if (registerOwner !== user.uid) {
     stopRegisterListeners();
     registerOwner = user.uid;
+    watchRegisterApproval(user, approvalEmail);
     try {
       await initializeRegister(user);
     } catch (error) {
@@ -200,6 +222,7 @@ let toastTimer;
 let unsubscribeStaff = null;
 let unsubscribeDay = null;
 let unsubscribeEntries = null;
+let unsubscribeApproval = null;
 
 function readCache(key, fallback) {
   try {
@@ -232,12 +255,50 @@ function entryFor(member) {
 }
 
 function stopRegisterListeners() {
+  unsubscribeApproval?.();
   unsubscribeStaff?.();
   unsubscribeDay?.();
   unsubscribeEntries?.();
+  unsubscribeApproval = null;
   unsubscribeStaff = null;
   unsubscribeDay = null;
   unsubscribeEntries = null;
+}
+
+function clearLocalRegisterCache() {
+  try {
+    localStorage.removeItem(STAFF_CACHE_KEY);
+    localStorage.removeItem(DAYS_CACHE_KEY);
+  } catch (error) {
+    console.error("Unable to clear the local attendance cache.", error);
+  }
+  staff = [];
+  days = {};
+}
+
+function denyRegisterAccess(message) {
+  stopRegisterListeners();
+  registerOwner = null;
+  clearLocalRegisterCache();
+  loginScreen.hidden = false;
+  appContent.hidden = true;
+  loginError.textContent = message;
+  if (auth.currentUser) {
+    signOut(auth).catch((error) => console.error("Unable to sign out after access was denied.", error));
+  }
+}
+
+function watchRegisterApproval(user, approvalEmail) {
+  unsubscribeApproval = onSnapshot(doc(db, "approvedUsers", approvalEmail), (snapshot) => {
+    if (!snapshot.exists() && auth.currentUser?.uid === user.uid) {
+      denyRegisterAccess("Register access has been revoked. Contact the register administrator.");
+    }
+  }, (error) => {
+    console.error("Unable to monitor register approval.", error);
+    if (auth.currentUser?.uid === user.uid) {
+      denyRegisterAccess("Unable to verify account approval. Sign in again when your connection is available.");
+    }
+  });
 }
 
 async function initializeRegister(user) {
@@ -250,7 +311,9 @@ async function initializeRegister(user) {
   $("#save-status").textContent = "Loading shared records…";
   render();
   await migrateLegacyCacheIfNeeded();
+  if (registerOwner !== user.uid) return;
   await selectResumeDate();
+  if (registerOwner !== user.uid) return;
   subscribeToStaff();
   subscribeToDay(dateInput.value);
 }

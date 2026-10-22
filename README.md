@@ -8,11 +8,11 @@ Serve the repository root with any local web server (for example, `python -m htt
 
 ## Login
 
-Create an account with an email address and password, verify the email, then sign in. Use the same account on each device to access the shared staff roster and attendance records. Use **Forgot password?** to request a reset link. Firebase Authentication manages accounts and sessions; passwords are never stored in the app.
+Create an account with an email address and password, verify the email, then sign in. An administrator must approve the email address before it can access attendance data. Use the same approved account on each device. Use **Forgot password?** to request a reset link. Firebase Authentication manages accounts and sessions; passwords are never stored in the app.
 
-The Firebase project is `attendance-register-88830`. Authentication uses verified email/password accounts and Cloud Firestore stores the shared roster and dated attendance entries in the `africa-south1` region. `firestore.rules` restricts database reads and writes to authenticated users with verified email addresses. The GitHub Pages hostname must remain listed in Firebase Authentication's authorized domains.
+The Firebase project is `attendance-register-88830`. Authentication uses verified email/password accounts and Cloud Firestore stores the shared roster and dated attendance entries in the `africa-south1` region. `firestore.rules` restricts data access to verified accounts whose lowercase email has an `approvedUsers/{email}` document. Only project administrators can manage this collection through the Firebase Console; client-side writes are denied. To approve an account, create a document in `approvedUsers` whose document ID is the lowercase email address, for example `user@example.com`. To revoke access, delete that document. The account must also exist in Firebase Authentication and have a verified email. The GitHub Pages hostname must remain listed in Firebase Authentication's authorized domains.
 
-Account creation is open to anyone who can verify an email address; every verified account can access the same department register. Add an organization-specific approval or allowlist before using the register for confidential staff data.
+The initial approved address is `plscommand@gmail.com`. New accounts are not approved automatically and cannot access the register until an administrator adds them to `approvedUsers`.
 
 ## Use the register
 
