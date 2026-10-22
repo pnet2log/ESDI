@@ -4,20 +4,26 @@ An attendance register for Engineering Services and Digital Innovation staff.
 
 ## Run locally
 
-Open `index.html` in a modern browser. The app has no build step or external runtime dependencies.
+Serve the repository root with any local web server (for example, `python -m http.server 4173`) and open `http://localhost:4173`. The app uses Firebase's browser SDK from Google's CDN.
 
 ## Login
 
-On the first visit in a browser, create an access password of at least 8 characters. Later visits require that password; signing out ends the current browser session. The password verifier and attendance records are stored in that browser, and clearing the site's browser data resets both.
+Create an account with an email address and password, verify the email, then sign in. Use the same account on each device to access the shared staff roster and attendance records. Use **Forgot password?** to request a reset link. Firebase Authentication manages accounts and sessions; passwords are never stored in the app.
 
-**Important:** GitHub Pages serves this app as public static files. The login is a browser-side convenience barrier, not server-enforced authentication; it cannot prevent a visitor from accessing the public app or its code. Do not use it to protect confidential attendance data. Real access control requires a private deployment or a backend authentication service.
+The Firebase project is `attendance-register-88830`. Authentication uses verified email/password accounts and Cloud Firestore stores the shared roster and dated attendance entries in the `africa-south1` region. `firestore.rules` restricts database reads and writes to authenticated users with verified email addresses. The GitHub Pages hostname must remain listed in Firebase Authentication's authorized domains.
+
+Account creation is open to anyone who can verify an email address; every verified account can access the same department register. Add an organization-specific approval or allowlist before using the register for confidential staff data.
 
 ## Use the register
 
 - Add staff members with their full name and rank in **New staff update**.
 - Enter each staff member's time in and time out; record a drawn or typed signature from the signature button.
-- Choose a date to view or maintain that day's register. Staff and attendance details save automatically in the browser on this device.
+- Choose a date to view or maintain that day's register. Changes sync to Firestore and appear on other signed-in devices. On sign-in, the most recent unsubmitted date is selected when one exists.
 - Select **Submit attendance** to submit a complete day's register. Every listed staff member must have a time in, time out, and signature.
 - Select **Export CSV** to download the selected day's attendance table.
 
-Clearing this browser's site data also clears its locally stored staff and attendance records. Export records regularly if they need to be retained or shared.
+The browser keeps a local cache for faster display and can import legacy local records into Firestore when the shared roster is empty. Export records regularly if you need an additional backup.
+
+## Firebase deployment
+
+The Firebase CLI project alias is stored in `.firebaserc`. Deploy Firestore rules with `npx firebase-tools deploy --only firestore:rules --project attendance-register-88830`. The app itself is published through GitHub Pages from the `pnet2log-esdi-attendance-register` branch.
