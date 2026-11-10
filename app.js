@@ -223,6 +223,9 @@ let unsubscribeStaff = null;
 let unsubscribeDay = null;
 let unsubscribeEntries = null;
 let unsubscribeApproval = null;
+let pendingSaveCount = 0;
+const attendanceSaveTimers = new Map();
+const attendanceSaveQueues = new Map();
 
 function readCache(key, fallback) {
   try {
@@ -418,7 +421,11 @@ function render() {
   $("#record-count").textContent = `${staff.length} ${staff.length === 1 ? "staff member" : "staff listed"}`;
   $("#submit-button").disabled = !dateInput.value;
   $("#export-button").disabled = staff.length === 0;
-  $("#save-status").textContent = day.submitted ? "Submitted · synced across devices" : "Synced attendance register";
+  $("#save-status").textContent = pendingSaveCount
+    ? "Saving changes…"
+    : day.submitted
+      ? "Submitted · synced across devices"
+      : "All changes saved";
 }
 
 function makeCell(text, className) {
@@ -460,9 +467,20 @@ function makeTimeCell(member, field, label) {
     input.title = "Time out is available from 17:00 Johannesburg time.";
     input.setAttribute("aria-describedby", "attendance-guidance");
   }
-  input.addEventListener("change", async () => {
+  input.addEventListener("input", () => {
+    const date = dateInput.value;
+    const day = currentDay(date);
+    const entry = entryFor(member);
+    entry[field] = input.value;
+    entry.status = null;
+    day.submitted = false;
+    writeCache(DAYS_CACHE_KEY, days);
+    $("#save-status").textContent = "Saving changes…";
+    scheduleAttendanceSave(member.id, date);
+  });
+  input.addEventListener("change", () => {
     entryFor(member)[field] = input.value;
-    await saveAttendanceChange(member.id);
+    saveAttendanceChange(member.id, dateInput.value);
   });
   cell.append(input);
   return cell;
@@ -502,25 +520,64 @@ function signedMark() {
   return mark;
 }
 
-async function saveAttendanceChange(staffId) {
-  const day = currentDay();
+function scheduleAttendanceSave(staffId, date) {
+  const key = `${date}/${staffId}`;
+  window.clearTimeout(attendanceSaveTimers.get(key));
+  attendanceSaveTimers.set(key, window.setTimeout(() => {
+    attendanceSaveTimers.delete(key);
+    saveAttendanceChange(staffId, date);
+  }, 450));
+}
+
+async function saveAttendanceChange(staffId, date = dateInput.value) {
+  const key = `${date}/${staffId}`;
+  window.clearTimeout(attendanceSaveTimers.get(key));
+  attendanceSaveTimers.delete(key);
+  const day = currentDay(date);
   day.submitted = false;
-  entryFor({ id: staffId }).status = null;
+  const entry = day.entries[staffId] || { timeIn: "", timeOut: "", signature: null };
+  entry.status = null;
+  day.entries[staffId] = entry;
   writeCache(DAYS_CACHE_KEY, days);
-  render();
-  try {
+  pendingSaveCount++;
+  $("#save-status").textContent = "Saving changes…";
+
+  const previousSave = attendanceSaveQueues.get(key) || Promise.resolve();
+  const currentSave = previousSave.catch(() => {}).then(async () => {
     await Promise.all([
-      setDoc(doc(db, "attendanceDays", dateInput.value), {
-        date: dateInput.value,
+      setDoc(doc(db, "attendanceDays", date), {
+        date,
         submitted: false,
         updatedAt: new Date().toISOString()
       }, { merge: true }),
-      setDoc(doc(db, "attendanceDays", dateInput.value, "entries", staffId), entryFor({ id: staffId }), { merge: true })
+      setDoc(doc(db, "attendanceDays", date, "entries", staffId), {
+        timeIn: entry.timeIn || "",
+        timeOut: entry.timeOut || "",
+        signature: entry.signature || null,
+        status: null
+      }, { merge: true })
     ]);
+  });
+  attendanceSaveQueues.set(key, currentSave);
+  try {
+    await currentSave;
   } catch (error) {
     console.error("Unable to save attendance to Firestore.", error);
     showToast("Attendance was not synced. Check your connection and try again.");
+  } finally {
+    if (attendanceSaveQueues.get(key) === currentSave) attendanceSaveQueues.delete(key);
+    pendingSaveCount--;
+    if (date === dateInput.value) render();
   }
+}
+
+async function flushPendingAttendanceSaves() {
+  const pendingSaves = [...attendanceSaveTimers.keys()].map((key) => {
+    const [date, staffId] = key.split("/", 2);
+    return saveAttendanceChange(staffId, date);
+  });
+  await Promise.all(pendingSaves);
+  await Promise.all([...attendanceSaveQueues.values()].map((save) => save.catch(() => {})));
 }
 
 function johannesburgTimeParts(date = new Date()) {
@@ -675,6 +732,7 @@ $("#submit-button").addEventListener("click", async () => {
   const day = currentDay(submitDate);
   submitButton.disabled = true;
   try {
+    await flushPendingAttendanceSaves();
     const savedStatuses = await Promise.all(staff.map((member) => {
       const entry = day.entries[member.id] || { timeIn: "", timeOut: "", signature: null };
       const status = !entry.timeIn && !entry.timeOut ? "absent" : "present";
@@ -705,28 +763,77 @@ $("#submit-button").addEventListener("click", async () => {
   }
 });
 
-$("#export-button").addEventListener("click", () => {
-  const records = staff.map((member) => {
-    const entry = entryFor(member);
-    const signature = entry.signature
-      ? entry.signature.kind === "text" ? entry.signature.value : "Handwritten signature recorded"
-      : "";
-    const status = entry.status || (currentDay().submitted
-      ? !entry.timeIn && !entry.timeOut ? "absent" : "present"
-      : "");
-    return [member.name, member.rank, entry.timeIn || "", entry.timeOut || "", signature, status];
-  });
-  const content = [
-    ["S.NO", "Fullname", "Rank", "Time IN", "Time OUT", "Signature", "Status"],
-    ...records.map((record, index) => [String(index + 1), ...record])
-  ].map((record) => record.map(csvValue).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob(["\uFEFF", content], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `esdi-attendance-${dateInput.value}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-  showToast("Attendance CSV downloaded.");
+$("#export-button").addEventListener("click", async () => {
+  const exportButton = $("#export-button");
+  exportButton.disabled = true;
+  try {
+    await flushPendingAttendanceSaves();
+    const [daySnapshot, staffSnapshot] = await Promise.all([
+      getDocs(collection(db, "attendanceDays")),
+      getDocs(collection(db, "staff"))
+    ]);
+    const staffById = new Map(staffSnapshot.docs.map((item) => [
+      item.id,
+      { name: item.data().name, rank: item.data().rank }
+    ]));
+    const dayRecords = await Promise.all(daySnapshot.docs.map(async (dayDocument) => {
+      const entries = await getDocs(collection(db, "attendanceDays", dayDocument.id, "entries"));
+      return {
+        date: dayDocument.id,
+        submitted: Boolean(dayDocument.data().submitted),
+        entries: entries.docs.map((entryDocument) => ({
+          staffId: entryDocument.id,
+          ...entryDocument.data()
+        }))
+      };
+    }));
+    const rowsByDay = new Map();
+    const records = dayRecords
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .flatMap((day) => {
+        if (day.entries.length === 0) {
+          return day.submitted
+            ? [[day.date, "", "", "", "", "", "", "Submitted · no staff listed"]]
+            : [];
+        }
+        rowsByDay.set(day.date, 0);
+        return day.entries
+          .sort((a, b) => (staffById.get(a.staffId)?.name || a.staffId)
+            .localeCompare(staffById.get(b.staffId)?.name || b.staffId))
+          .map((entry) => {
+            const member = staffById.get(entry.staffId) || {
+              name: `Unknown staff (${entry.staffId})`,
+              rank: ""
+            };
+            const signature = entry.signature
+              ? entry.signature.kind === "text" ? entry.signature.value : "Handwritten signature recorded"
+              : "";
+            const status = entry.status
+              || (day.submitted
+                ? !entry.timeIn && !entry.timeOut ? "absent" : "present"
+                : "In progress");
+            const serialNumber = (rowsByDay.get(day.date) || 0) + 1;
+            rowsByDay.set(day.date, serialNumber);
+            return [day.date, String(serialNumber), member.name, member.rank, entry.timeIn || "", entry.timeOut || "", signature, status];
+          });
+      });
+    const content = [
+      ["Date", "S.NO", "Fullname", "Rank", "Time IN", "Time OUT", "Signature", "Status"],
+      ...records
+    ].map((record) => record.map(csvValue).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", content], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `esdi-attendance-history-${localDate(new Date())}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Attendance history exported (${records.length} ${records.length === 1 ? "record" : "records"}).`);
+  } catch (error) {
+    console.error("Unable to export attendance history.", error);
+    showToast("Attendance history was not exported. Check your connection and try again.");
+  } finally {
+    exportButton.disabled = staff.length === 0;
+  }
 });
 
 function csvValue(value) {

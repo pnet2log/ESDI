@@ -20,7 +20,8 @@ The initial approved address is `plscommand@gmail.com`. New accounts are not app
 - Enter each staff member's time in and time out; time out opens at 17:00 Johannesburg time. Firestore also rejects non-empty time-out writes before 17:00 Johannesburg time. Record a drawn or typed signature from the signature button.
 - Choose a date to view or maintain that day's register. Changes sync to Firestore and appear on other signed-in devices. On sign-in, the most recent unsubmitted date is selected when one exists.
 - Select **Submit attendance** even when no attendance has been entered. Staff without either a time in or time out are recorded and shown as absent; other staff are marked present.
-- Select **Export CSV** to download the selected day's attendance table.
+- Attendance changes are saved locally immediately and synced to Firestore as you type; the save status shows when updates are in progress and when they are saved.
+- Select **Export history CSV** to download every saved attendance date, including in-progress entries and submitted attendance statuses.
 
 The browser keeps a local cache for faster display and can import legacy local records into Firestore when the shared roster is empty. Export records regularly if you need an additional backup.
 
