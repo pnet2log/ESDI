@@ -404,7 +404,7 @@ function render() {
     const row = document.createElement("tr");
     row.append(
       makeCell(String(index + 1).padStart(2, "0"), "number-cell"),
-      makePersonCell(member),
+      makePersonCell(member, entry, day.submitted),
       makeCell(member.rank, "rank-text"),
       makeTimeCell(member, "timeIn", "Time in"),
       makeTimeCell(member, "timeOut", "Time out"),
@@ -416,7 +416,7 @@ function render() {
   $("#checked-in-count").textContent = staff.filter((member) => Boolean(entryFor(member).timeIn)).length;
   $("#signature-count").textContent = staff.filter((member) => Boolean(entryFor(member).signature)).length;
   $("#record-count").textContent = `${staff.length} ${staff.length === 1 ? "staff member" : "staff listed"}`;
-  $("#submit-button").disabled = staff.length === 0;
+  $("#submit-button").disabled = !dateInput.value;
   $("#export-button").disabled = staff.length === 0;
   $("#save-status").textContent = day.submitted ? "Submitted · synced across devices" : "Synced attendance register";
 }
@@ -428,14 +428,22 @@ function makeCell(text, className) {
   return cell;
 }
 
-function makePersonCell(member) {
+function makePersonCell(member, entry, submitted) {
   const cell = document.createElement("td");
   const name = document.createElement("span");
   name.className = "person-name";
   name.textContent = member.name;
   const detail = document.createElement("span");
-  detail.className = "person-detail";
-  detail.textContent = "ESDI staff";
+  detail.className = submitted && entry.status === "absent"
+    ? "person-detail attendance-status absent"
+    : submitted && entry.status === "present"
+      ? "person-detail attendance-status present"
+      : "person-detail";
+  detail.textContent = submitted && entry.status === "absent"
+    ? "Absent"
+    : submitted && entry.status === "present"
+      ? "Present"
+      : "ESDI staff";
   cell.append(name, detail);
   return cell;
 }
@@ -447,6 +455,11 @@ function makeTimeCell(member, field, label) {
   input.type = "time";
   input.value = entryFor(member)[field] || "";
   input.setAttribute("aria-label", `${label} for ${member.name}`);
+  if (field === "timeOut") {
+    input.disabled = !isTimeOutAvailable();
+    input.title = "Time out is available from 17:00 Johannesburg time.";
+    input.setAttribute("aria-describedby", "attendance-guidance");
+  }
   input.addEventListener("change", async () => {
     entryFor(member)[field] = input.value;
     await saveAttendanceChange(member.id);
@@ -492,6 +505,7 @@ function signedMark() {
 async function saveAttendanceChange(staffId) {
   const day = currentDay();
   day.submitted = false;
+  entryFor({ id: staffId }).status = null;
   writeCache(DAYS_CACHE_KEY, days);
   render();
   try {
@@ -507,6 +521,35 @@ async function saveAttendanceChange(staffId) {
     console.error("Unable to save attendance to Firestore.", error);
     showToast("Attendance was not synced. Check your connection and try again.");
   }
+}
+
+function johannesburgTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Johannesburg",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map(({ type, value }) => [type, Number(value)]));
+}
+
+function isTimeOutAvailable() {
+  const { hour, minute } = johannesburgTimeParts();
+  return hour >= 17;
+}
+
+function scheduleTimeOutUnlock() {
+  const now = new Date();
+  const { hour, minute, second } = johannesburgTimeParts(now);
+  const minutesUntilRefresh = hour < 17
+    ? 17 * 60 - (hour * 60 + minute)
+    : 24 * 60 - (hour * 60 + minute);
+  const millisecondsUntilRefresh = (minutesUntilRefresh * 60 - second) * 1000 - now.getMilliseconds();
+  window.setTimeout(() => {
+    render();
+    scheduleTimeOutUnlock();
+  }, millisecondsUntilRefresh);
 }
 
 function localDate(date) {
@@ -624,28 +667,41 @@ dateInput.addEventListener("change", () => {
   subscribeToDay(dateInput.value);
 });
 
+scheduleTimeOutUnlock();
+
 $("#submit-button").addEventListener("click", async () => {
-  const incomplete = staff.filter((member) => {
-    const entry = entryFor(member);
-    return !entry.timeIn || !entry.timeOut || !entry.signature;
-  });
-  if (incomplete.length) {
-    showToast(`Complete time in, time out, and signature for ${incomplete.length} ${incomplete.length === 1 ? "staff member" : "staff members"} before submitting.`);
-    return;
-  }
+  const submitButton = $("#submit-button");
+  const submitDate = dateInput.value;
+  const day = currentDay(submitDate);
+  submitButton.disabled = true;
   try {
-    await setDoc(doc(db, "attendanceDays", dateInput.value), {
-      date: dateInput.value,
+    const savedStatuses = await Promise.all(staff.map((member) => {
+      const entry = day.entries[member.id] || { timeIn: "", timeOut: "", signature: null };
+      const status = !entry.timeIn && !entry.timeOut ? "absent" : "present";
+      return setDoc(doc(db, "attendanceDays", submitDate, "entries", member.id), {
+        timeIn: entry.timeIn || "",
+        timeOut: entry.timeOut || "",
+        signature: entry.signature || null,
+        status
+      }, { merge: true }).then(() => [member.id, status]);
+    }));
+    await setDoc(doc(db, "attendanceDays", submitDate), {
+      date: submitDate,
       submitted: true,
       updatedAt: new Date().toISOString()
     }, { merge: true });
-    currentDay().submitted = true;
+    for (const [staffId, status] of savedStatuses) {
+      day.entries[staffId] = { ...day.entries[staffId], status };
+    }
+    day.submitted = true;
     writeCache(DAYS_CACHE_KEY, days);
     render();
     showToast("Attendance submitted and synced across devices.");
   } catch (error) {
     console.error("Unable to submit attendance.", error);
     showToast("Attendance was not submitted. Check your connection and try again.");
+  } finally {
+    render();
   }
 });
 
@@ -655,10 +711,13 @@ $("#export-button").addEventListener("click", () => {
     const signature = entry.signature
       ? entry.signature.kind === "text" ? entry.signature.value : "Handwritten signature recorded"
       : "";
-    return [member.name, member.rank, entry.timeIn || "", entry.timeOut || "", signature];
+    const status = entry.status || (currentDay().submitted
+      ? !entry.timeIn && !entry.timeOut ? "absent" : "present"
+      : "");
+    return [member.name, member.rank, entry.timeIn || "", entry.timeOut || "", signature, status];
   });
   const content = [
-    ["S.NO", "Fullname", "Rank", "Time IN", "Time OUT", "Signature"],
+    ["S.NO", "Fullname", "Rank", "Time IN", "Time OUT", "Signature", "Status"],
     ...records.map((record, index) => [String(index + 1), ...record])
   ].map((record) => record.map(csvValue).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob(["\uFEFF", content], { type: "text/csv;charset=utf-8" }));

@@ -12,6 +12,10 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/approvedUsers/$(request.auth.token.email.lower()));
     }
 
+    function timeOutWindowOpen() {
+      return request.resource.data.timeOut == '' || request.time.hours() >= 15;
+    }
+
     match /approvedUsers/{email} {
       allow get: if verifiedUser() && request.auth.token.email.lower() == email;
       allow list, create, update, delete: if false;
@@ -48,6 +52,12 @@ service cloud.firestore {
           && request.resource.data.timeIn.size() <= 5
           && request.resource.data.timeOut is string
           && request.resource.data.timeOut.size() <= 5
+          && timeOutWindowOpen()
+          && (
+            !('status' in request.resource.data)
+            || request.resource.data.status == null
+            || request.resource.data.status in ['present', 'absent']
+          )
           && (
             request.resource.data.signature == null
             || (

@@ -17,9 +17,9 @@ The initial approved address is `plscommand@gmail.com`. New accounts are not app
 ## Use the register
 
 - Add staff members with their full name and rank in **New staff update**.
-- Enter each staff member's time in and time out; record a drawn or typed signature from the signature button.
+- Enter each staff member's time in and time out; time out opens at 17:00 Johannesburg time. Firestore also rejects non-empty time-out writes before 17:00 Johannesburg time. Record a drawn or typed signature from the signature button.
 - Choose a date to view or maintain that day's register. Changes sync to Firestore and appear on other signed-in devices. On sign-in, the most recent unsubmitted date is selected when one exists.
-- Select **Submit attendance** to submit a complete day's register. Every listed staff member must have a time in, time out, and signature.
+- Select **Submit attendance** even when no attendance has been entered. Staff without either a time in or time out are recorded and shown as absent; other staff are marked present.
 - Select **Export CSV** to download the selected day's attendance table.
 
 The browser keeps a local cache for faster display and can import legacy local records into Firestore when the shared roster is empty. Export records regularly if you need an additional backup.
