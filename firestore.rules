@@ -47,7 +47,7 @@ service cloud.firestore {
       match /entries/{staffId} {
         allow read: if approvedUser();
         allow create, update: if approvedUser()
-          && request.resource.data.keys().hasOnly(['timeIn', 'timeOut', 'signature'])
+          && request.resource.data.keys().hasOnly(['timeIn', 'timeOut', 'signature', 'status'])
           && request.resource.data.timeIn is string
           && request.resource.data.timeIn.size() <= 5
           && request.resource.data.timeOut is string
